@@ -3,57 +3,38 @@ import re
 import scrapy
 from scrapy.utils.response import open_in_browser
 
+from selenium_test import process_listing_fotocasa, get_max_page
 from web_scrapper.items import PropertyItem
 from scrapy_splash import SplashRequest
 
-script = """
-function main(splash)
-        local num_scrolls = 20
-        local scroll_delay = 1
-
-        local scroll_to = splash:jsfunc("window.scrollTo")
-        local get_body_height = splash:jsfunc(
-            "function() {return document.body.scrollHeight;}"
-        )
-        assert(splash:go(splash.args.url))
-        splash:wait(splash.args.wait)
-
-        for _ = 1, num_scrolls do
-            local height = get_body_height()
-            for i = 1, 10 do
-                scroll_to(0, height * i/10)
-                splash:wait(scroll_delay/10)
-            end
-        end        
-        return splash:html()
-end
-
-"""
 
 
 
 class FotocasaSpider(scrapy.Spider):
     name = 'fotocasa'
     allowed_domains = ['fotocasa.es']
-    start_urls = ['https://www.fotocasa.es/es/alquiler/viviendas/barcelona-capital/todas-las-zonas/l']
+    start_urls = ['https://www.fotocasa.es/es/alquiler/viviendas/barcelona-capital/todas-las-zonas/l/1']
 
     def start_requests(self):
-        yield SplashRequest(url=self.start_urls[0], callback=self.parse, endpoint='execute', args={'wait': 2, 'lua_source': script})
+        urls = process_listing_fotocasa(self.start_urls[0])
+        max_page = get_max_page(self.start_urls[0])
+        print('max page -> ' + max_page)
+        for i in range(int(max_page)):
+            for url in urls:
+                yield SplashRequest(
+                    url=url,
+                    callback=self.parse_listing
+                )
+            urls = process_listing_fotocasa(self.get_next_url(i+1))
+            print('URLS to process')
+            print(urls)
+        print("finish")
 
+    def get_next_url(self, i):
+        url = self.start_urls[0]
+        substr = url[url.rfind('/'):]
+        return url.replace(substr, '/'+str(i+1))
 
-    def parse(self, response):
-        listings = response.xpath("//article[@class='re-CardPackPremium']/a[@class='re-CardPackPremium-carousel']/@href").getall()
-        for listing_url in listings:
-            yield SplashRequest(
-                url=response.urljoin(listing_url),
-                callback=self.parse_listing
-            )
-        print("Next page")
-        next_page = response.xpath("//a[@class ='sui-AtomButton--empty']/@href").get()
-        #if next_page:
-        #    yield scrapy.Request(response.urljoin(next_page), self.parse)
-        #else:
-        #    print("finish")
 
     def parse_listing(self, response):
         property = PropertyItem()
@@ -61,9 +42,13 @@ class FotocasaSpider(scrapy.Spider):
         title = response.xpath("//*[@class='re-DetailHeader-propertyTitle']/text()").get()
         property["url"] = response.url
         property["title"] = title
-        property["location"] = re.search('Piso de alquiler en (.*)', title).group(1)
+        regex = re.search('en (.*)', title)
+        if regex:
+            property["location"] = regex.group(1)
+        property["neigborhood"] = response.css('ol.re-Breadcrumb-links .re-Breadcrumb-text::text').get()
         property["body"] = "".join(response.css('.fc-DetailDescription::text').getall())
-        property["type"] = response.xpath('//*[@class="re-DetailHeader-features"]//text()').getall()[6]
+        types = response.xpath('//*[@class="re-DetailHeader-features"]//text()').getall()
+        property["type"] = types[6] if 6 < len(types) else '' #safe access
 
         # Price
         property["current_price"] = response.xpath('//*[@class="re-DetailHeader-price"]/text()').re_first('(.+) €')

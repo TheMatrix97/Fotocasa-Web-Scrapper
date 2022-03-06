@@ -1,2 +1,4 @@
 Scrapy
 scrapy-splash
+scrapy-rotating-proxies
+selenium

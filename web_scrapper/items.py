@@ -17,6 +17,7 @@ class PropertyItem(scrapy.Item):
     url = scrapy.Field()
     title = scrapy.Field()
     location = scrapy.Field()
+    neigborhood = scrapy.Field()
     body = scrapy.Field()
     type = scrapy.Field()
 
