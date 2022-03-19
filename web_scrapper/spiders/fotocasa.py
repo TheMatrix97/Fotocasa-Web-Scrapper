@@ -1,13 +1,10 @@
 import re
 
 import scrapy
-from scrapy.utils.response import open_in_browser
-
-from selenium_test import process_listing_fotocasa, get_max_page
-from web_scrapper.items import PropertyItem
 from scrapy_splash import SplashRequest
 
-
+from selenium_provider import process_listing_fotocasa, get_max_page
+from web_scrapper.items import PropertyItem
 
 
 class FotocasaSpider(scrapy.Spider):
